@@ -4,10 +4,10 @@ import random
 import logging
 from typing import Optional
 
+import aiohttp
 import discord
 from discord.ext import commands
 import yt_dlp
-from openai import OpenAI
 
 # =========================
 # Logging
@@ -21,8 +21,8 @@ logger = logging.getLogger("osais-bot")
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 STICKY_VOICE_ID = int(os.getenv("STICKY_VOICE_ID", "0"))
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "mistralai/mistral-7b-instruct:free")
 
 if not TOKEN:
     raise ValueError("TOKEN مو موجود. حطه في Variables.")
@@ -30,8 +30,6 @@ if not GUILD_ID:
     raise ValueError("GUILD_ID مو موجود. حطه في Variables.")
 if not STICKY_VOICE_ID:
     raise ValueError("STICKY_VOICE_ID مو موجود. حطه في Variables.")
-
-ai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # =========================
 # Discord setup
@@ -99,44 +97,63 @@ LOVE_REPLIES = [
 ]
 
 # =========================
-# AI helper
+# AI helper - OpenRouter
 # =========================
 async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
-    if not ai_client:
-        return "الذكاء الاصطناعي مو مفعل الحين. حط OPENAI_API_KEY في Variables."
+    if not OPENROUTER_API_KEY:
+        return "الذكاء الاصطناعي مو مفعل الحين. حط OPENROUTER_API_KEY في Variables."
 
-    loop = asyncio.get_running_loop()
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://railway.app",
+        "X-Title": "Osais Club Bot",
+    }
 
-    def _run():
-        response = ai_client.responses.create(
-            model=OPENAI_MODEL,
-            input=[
-                {
-                    "role": "system",
-                    "content": (
-                        "أنت بوت ديسكورد اسمه Osais Club. "
-                        "رد بالعربي وبلهجة كويتية خفيفة، بأسلوب لطيف ومضحك ومرتب. "
-                        "جاوب باختصار وبشكل مفيد. "
-                        "إذا طلب المستخدم نكتة عطه شيء خفيف. "
-                        "إذا طلب رد على أحد، عطه رد مزحي وخفيف بدون إساءة جارحة. "
-                        "إذا كان السؤال عام جاوبه بشكل واضح ومباشر. "
-                        "لا تقول إنك إنسان؛ تكلم كبوت ذكي داخل سيرفر ديسكورد."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"اسم المستخدم: {user_name}\nالرسالة: {user_text}",
-                },
-            ],
-        )
-        return response.output_text
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "أنت بوت ديسكورد اسمه Osais Club. "
+                    "رد بالعربي وبلهجة كويتية خفيفة، بأسلوب لطيف ومضحك ومرتب. "
+                    "جاوب باختصار وبشكل مفيد. "
+                    "إذا طلب المستخدم نكتة عطه شيء خفيف. "
+                    "إذا طلب رد على أحد، عطه رد مزحي وخفيف بدون إساءة جارحة. "
+                    "إذا كان السؤال عام جاوبه بشكل واضح ومباشر. "
+                    "لا تقول إنك إنسان؛ تكلم كبوت ذكي داخل سيرفر ديسكورد."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"اسم المستخدم: {user_name}\nالرسالة: {user_text}",
+            },
+        ],
+    }
 
     try:
-        result = await loop.run_in_executor(None, _run)
-        return (result or "ما عرفت أرد الحين، جرّب مرة ثانية.").strip()
+        timeout = aiohttp.ClientTimeout(total=45)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, headers=headers, json=payload) as resp:
+                data = await resp.json()
+
+                if resp.status != 200:
+                    logger.error("OpenRouter error %s: %s", resp.status, data)
+                    return "صار خطأ بالذكاء الاصطناعي الحين، جرّب بعد شوي."
+
+                choices = data.get("choices", [])
+                if not choices:
+                    return "ما عرفت أرد الحين، جرّب مرة ثانية."
+
+                content = choices[0].get("message", {}).get("content", "")
+                return (content or "ما عرفت أرد الحين، جرّب مرة ثانية.").strip()
+
     except Exception as e:
         logger.exception("AI error: %s", e)
         return "صار خطأ بالذكاء الاصطناعي الحين، جرّب بعد شوي."
+
 
 # =========================
 # Music helpers
@@ -286,6 +303,7 @@ async def ensure_voice() -> Optional[discord.VoiceClient]:
         logger.exception("Voice ensure error: %s", e)
         return None
 
+
 # =========================
 # Events
 # =========================
@@ -372,6 +390,7 @@ async def on_command_error(ctx, error):
                 await ctx.send(reply[:1900])
                 return
     logger.exception("Unhandled command error: %s", error)
+
 
 # =========================
 # Music commands
@@ -473,6 +492,7 @@ async def leave_command(ctx):
     else:
         await ctx.send("أنا أصلًا مو داخل روم.")
 
+
 # =========================
 # AI / Fun commands
 # =========================
@@ -520,6 +540,7 @@ async def ai_command(ctx, *, question: str):
     reply = await ask_ai(question, ctx.author.display_name)
     await ctx.send(reply[:1900])
 
+
 # =========================
 # Per-command error handler
 # =========================
@@ -543,5 +564,6 @@ async def command_error(ctx, error):
     else:
         logger.exception("Command error: %s", error)
         await ctx.send("صار خطأ بسيط، جرّب مرة ثانية.")
+
 
 bot.run(TOKEN)
