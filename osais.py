@@ -33,8 +33,6 @@ if not STICKY_VOICE_ID:
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY مو موجود. حطه في Variables.")
 
-# OpenAI API uses API keys for authentication, and keys should be loaded from env vars.
-# Responses API is the current text generation interface in the official API reference.
 ai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # =========================
@@ -121,6 +119,7 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
                         "إذا طلب المستخدم نكتة عطه شيء خفيف. "
                         "إذا طلب رد على أحد، عطه رد مزحي وخفيف بدون إساءة جارحة. "
                         "إذا كان السؤال عام جاوبه بشكل واضح ومباشر. "
+                        "إذا سأل المستخدم من أنت، قل له إنك Osais Club بوت ديسكورد للاغاني والسوالف والذكاء الاصطناعي. "
                         "لا تقول إنك إنسان؛ تكلم كبوت ذكي داخل سيرفر ديسكورد."
                     ),
                 },
