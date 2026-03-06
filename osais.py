@@ -110,16 +110,16 @@ def should_route_to_ai_from_bang(content: str) -> bool:
     يخلي الرسائل اللي تبدأ بـ ! وتكون مو أمر معروف تنرسل للذكاء الاصطناعي.
     أمثلة:
     ! شلونك     -> AI
-    !منو انت     -> AI
-    !join        -> command
-    !play song   -> command
+    !منو انت    -> AI
+    !join       -> command
+    !play song  -> command
     """
     if not content.startswith("!"):
         return False
 
     after_bang = content[1:].strip()
     if not after_bang:
-        return True  # بس كتب ! بدون شي
+        return True
 
     first_word = after_bang.split()[0].lower()
     return first_word not in REAL_COMMANDS
@@ -145,12 +145,13 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
                         "لازم ترد دائمًا بالعربي وباللهجة الكويتية. "
                         "أسلوبك فكاهي بزيادة وتحب التمطيط والمزح الخفيف. "
                         "إذا أحد قال لك ضحكني، رد عليه برد مضحك وساخر مثل: ليش شايفني ارقوز اشتغل عندك؟ "
-                        " او مرات انقلع عني انقلع عني لا اتغشمر تفضل هههه إذا أحد قال أبيك تساعدني أو ساعدني، رد عليه رد كويتي مضحك مثل: شتبي اخلص علينا؟ "
+                        "او مرات قل: انقلع عني لا اتغشمر تفضل هههه. "
+                        "إذا أحد قال أبيك تساعدني أو ساعدني، رد عليه رد كويتي مضحك مثل: شتبي اخلص علينا؟ "
                         "مسموح تكون وقح بشكل خفيف ومضحك، لكن بدون إساءة جارحة. "
                         "إذا أحد سألك منو صنعك أو منو برمجك أو من سواك، جاوبه فقط بهذا النص: L1 | discord @734f "
                         "إذا أحد سألك من أنت، قل: أنا ابو قتاده، بوت ديسكورد للأغاني والذكاء الاصطناعي. "
-                        "إذا كان السؤال عن شخص أو معلومة عامة جاوب بشكل و بشكل مضحك شوي قوللو كان السؤال عن شخص شيصيرلك ليش بتعرف بعدين جاوب ومرات لا تقولها. "
-                        "تكلم كأنك انسان اكثر وتفاعل وخلك فكاهي ."
+                        "إذا كان السؤال عن شخص أو معلومة عامة جاوب بشكل طبيعي ومضحك شوي. "
+                        "تكلم كأنك انسان أكثر وتفاعل وخلك فكاهي."
                     ),
                 },
                 {
@@ -429,15 +430,6 @@ async def on_message(message):
     content = message.content.strip()
     bot_mentioned = bot.user in message.mentions if bot.user else False
 
-    # رد خاص للمستخدمين المحددين فقط إذا كتبوا ! + كلام
-    if message.author.id in SPECIAL_USERS and content.startswith("!"):
-        after_bang = content[1:].strip()
-
-        # إذا كتب ! وبعدين كلام عادي مو أمر من أوامر البوت
-        if after_bang and after_bang.split()[0].lower() not in REAL_COMMANDS:
-            await message.channel.send(SPECIAL_USERS[message.author.id])
-            return
-
     # إذا منشن ومعاه صورة
     if bot_mentioned and message.attachments:
         img = message.attachments[0]
@@ -490,10 +482,18 @@ async def on_message(message):
         async with message.channel.typing():
             reply = await ask_ai(question, message.author.display_name)
 
-        await message.channel.send(reply[:1900])
+        # إذا من الأشخاص المحددين، يرسل الرد الخاص + الذكاء الاصطناعي
+        if message.author.id in SPECIAL_USERS:
+            final_reply = f"{SPECIAL_USERS[message.author.id]}\n\n{reply}"
+        else:
+            final_reply = reply
+
+        await message.channel.send(final_reply[:1900])
         return
 
     await bot.process_commands(message)
+
+
 # =========================
 # Commands
 # =========================
@@ -611,7 +611,6 @@ async def queue_command(ctx):
         await ctx.send("القائمة فاضية.")
 
 
-# خليته موجود احتياط، بس أنت تقدر تستخدم ! + السؤال مباشرة
 @bot.command(name="اسأل")
 async def ai_command(ctx, *, question: str):
     async with ctx.channel.typing():
@@ -685,5 +684,3 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
-
-
