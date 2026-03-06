@@ -307,7 +307,17 @@ async def help_command(ctx):
         "`!help` أو `!مساعدة`"
     )
 
+@bot.command(name="replay", aliases=["احبك"])
+@commands.has_permissions(administrator=True)
+async def replay_command(ctx):
+    await ctx.send("احبك اكثر ❤️")
 
+
+@bot.command(name="replay", aliases=["كل زق"])
+@commands.has_permissions(administrator=True)
+async def replay_command(ctx):
+    await ctx.send("كل زقين")
+    
 @join_command.error
 @play_command.error
 @pause_command.error
@@ -327,4 +337,5 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
 
