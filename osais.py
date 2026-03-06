@@ -1,15 +1,28 @@
 import os
 import asyncio
 import random
+import logging
+from typing import Optional
+
 import discord
 from discord.ext import commands
 import yt_dlp
 from openai import OpenAI
 
+# =========================
+# Logging
+# =========================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("osais-bot")
+
+# =========================
+# Env vars
+# =========================
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 STICKY_VOICE_ID = int(os.getenv("STICKY_VOICE_ID", "0"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 
 if not TOKEN:
     raise ValueError("TOKEN مو موجود. حطه في Variables.")
@@ -17,11 +30,12 @@ if not GUILD_ID:
     raise ValueError("GUILD_ID مو موجود. حطه في Variables.")
 if not STICKY_VOICE_ID:
     raise ValueError("STICKY_VOICE_ID مو موجود. حطه في Variables.")
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY مو موجود. حطه في Variables.")
 
-ai_client = OpenAI(api_key=OPENAI_API_KEY)
+ai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+# =========================
+# Discord setup
+# =========================
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
@@ -29,6 +43,9 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
+# =========================
+# State
+# =========================
 song_queue = []
 is_processing = False
 queue_lock = asyncio.Lock()
@@ -40,6 +57,7 @@ YTDL_OPTIONS = {
     "default_search": "ytsearch",
     "noplaylist": True,
     "extract_flat": False,
+    "skip_download": True,
 }
 
 FFMPEG_OPTIONS = {
@@ -80,17 +98,18 @@ LOVE_REPLIES = [
     "يا جعل عمري قبل عمرك ❤️",
 ]
 
-
 # =========================
 # AI helper
 # =========================
-
 async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
+    if not ai_client:
+        return "الذكاء الاصطناعي مو مفعل الحين. حط OPENAI_API_KEY في Variables."
+
     loop = asyncio.get_running_loop()
 
     def _run():
         response = ai_client.responses.create(
-            model="gpt-5-mini",
+            model=OPENAI_MODEL,
             input=[
                 {
                     "role": "system",
@@ -99,7 +118,7 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
                         "رد بالعربي وبلهجة كويتية خفيفة، بأسلوب لطيف ومضحك ومرتب. "
                         "جاوب باختصار وبشكل مفيد. "
                         "إذا طلب المستخدم نكتة عطه شيء خفيف. "
-                        "إذا طلب رد على أحد، عطه رد مزحي وخفيف بدون ألفاظ جارحة أو إساءة قوية. "
+                        "إذا طلب رد على أحد، عطه رد مزحي وخفيف بدون إساءة جارحة. "
                         "إذا كان السؤال عام جاوبه بشكل واضح ومباشر. "
                         "لا تقول إنك إنسان؛ تكلم كبوت ذكي داخل سيرفر ديسكورد."
                     ),
@@ -112,14 +131,16 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
         )
         return response.output_text
 
-    result = await loop.run_in_executor(None, _run)
-    return (result or "ما عرفت أرد الحين، جرّب مرة ثانية.").strip()
-
+    try:
+        result = await loop.run_in_executor(None, _run)
+        return (result or "ما عرفت أرد الحين، جرّب مرة ثانية.").strip()
+    except Exception as e:
+        logger.exception("AI error: %s", e)
+        return "صار خطأ بالذكاء الاصطناعي الحين، جرّب بعد شوي."
 
 # =========================
 # Music helpers
 # =========================
-
 async def get_guild_and_channel():
     guild = bot.get_guild(GUILD_ID)
     if guild is None:
@@ -132,16 +153,16 @@ async def get_guild_and_channel():
     return guild, channel
 
 
-async def ensure_sticky_voice():
+async def ensure_sticky_voice() -> Optional[discord.VoiceClient]:
     async with sticky_lock:
         guild, channel = await get_guild_and_channel()
 
         if guild is None:
-            print("ما حصلت السيرفر. تأكد من GUILD_ID.")
+            logger.warning("ما حصلت السيرفر. تأكد من GUILD_ID.")
             return None
 
         if channel is None:
-            print("ما حصلت الروم الصوتي. تأكد من STICKY_VOICE_ID.")
+            logger.warning("ما حصلت الروم الصوتي. تأكد من STICKY_VOICE_ID.")
             return None
 
         vc = guild.voice_client
@@ -150,26 +171,26 @@ async def ensure_sticky_voice():
             if vc is None or not vc.is_connected():
                 vc = await channel.connect(self_deaf=True)
                 await asyncio.sleep(1)
-                print(f"دخلت الروم الثابت: {channel.name}")
+                logger.info("دخلت الروم الثابت: %s", channel.name)
                 return vc
 
-            if vc.channel.id != STICKY_VOICE_ID:
+            if vc.channel and vc.channel.id != STICKY_VOICE_ID:
                 await vc.move_to(channel)
-                print(f"رجعت للروم الثابت: {channel.name}")
+                logger.info("رجعت للروم الثابت: %s", channel.name)
 
             return vc
-
         except Exception as e:
-            print(f"Sticky voice error: {e}")
+            logger.exception("Sticky voice error: %s", e)
             return None
 
 
 async def get_song_info(search: str):
     loop = asyncio.get_running_loop()
-    data = await loop.run_in_executor(
-        None,
-        lambda: ytdl.extract_info(search, download=False)
-    )
+
+    def _run():
+        return ytdl.extract_info(search, download=False)
+
+    data = await loop.run_in_executor(None, _run)
 
     if data is None:
         raise ValueError("ما قدرت أوصل للأغنية.")
@@ -222,12 +243,12 @@ async def play_next(text_channel: discord.TextChannel):
 
         def after_playing(error):
             if error:
-                print(f"Playback error: {error}")
+                logger.exception("Playback error: %s", error)
             future = asyncio.run_coroutine_threadsafe(play_next(text_channel), bot.loop)
             try:
                 future.result()
             except Exception as e:
-                print(f"Queue error: {e}")
+                logger.exception("Queue error: %s", e)
 
         vc.play(source, after=after_playing)
 
@@ -238,11 +259,12 @@ async def play_next(text_channel: discord.TextChannel):
         )
 
     except Exception as e:
-        await text_channel.send(f"صار خطأ بالتشغيل: `{e}`")
+        logger.exception("Play next error: %s", e)
+        await text_channel.send("صار خطأ بالتشغيل، بجرب اللي بعدها.")
         await play_next(text_channel)
 
 
-async def ensure_voice():
+async def ensure_voice() -> Optional[discord.VoiceClient]:
     guild, channel = await get_guild_and_channel()
 
     if guild is None or channel is None:
@@ -256,35 +278,31 @@ async def ensure_voice():
             await asyncio.sleep(1)
             return vc
 
-        if vc.channel.id != STICKY_VOICE_ID:
+        if vc.channel and vc.channel.id != STICKY_VOICE_ID:
             await vc.move_to(channel)
 
         return vc
-
     except Exception as e:
-        print(f"Voice ensure error: {e}")
+        logger.exception("Voice ensure error: %s", e)
         return None
-
 
 # =========================
 # Events
 # =========================
-
 @bot.event
 async def on_ready():
-    print(f"البوت اشتغل: {bot.user}")
+    logger.info("البوت اشتغل: %s", bot.user)
     await ensure_sticky_voice()
 
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if member.id != bot.user.id:
+    if not bot.user or member.id != bot.user.id:
         return
 
     if before.channel is not None and after.channel is None:
         await asyncio.sleep(2)
         await ensure_sticky_voice()
-
     elif after.channel is not None and after.channel.id != STICKY_VOICE_ID:
         await asyncio.sleep(2)
         await ensure_sticky_voice()
@@ -299,7 +317,6 @@ async def on_message(message):
     content_lower = content.lower()
     bot_mentioned = bot.user in message.mentions if bot.user else False
 
-    # إذا أحد منشن البوت
     if bot_mentioned:
         clean_text = content
         if bot.user:
@@ -311,7 +328,6 @@ async def on_message(message):
             await message.channel.send(random.choice(MENTION_REPLIES))
             return
 
-        # ردود سريعة قبل الذكاء الاصطناعي
         if "نكته" in clean_text or "نكتة" in clean_text:
             await message.channel.send(random.choice(KUWAITI_JOKES))
             return
@@ -322,14 +338,10 @@ async def on_message(message):
             await message.channel.send(random.choice(LOVE_REPLIES))
             return
 
-        try:
-            reply = await ask_ai(clean_text, message.author.display_name)
-            await message.channel.send(reply[:1900])
-        except Exception as e:
-            await message.channel.send(f"صار خطأ بالذكاء الاصطناعي: `{e}`")
+        reply = await ask_ai(clean_text, message.author.display_name)
+        await message.channel.send(reply[:1900])
         return
 
-    # أوامر نصية مباشرة
     if content_lower in ["!عطني نكته", "!عطني نكتة", "!نكته", "!نكتة"]:
         await message.channel.send(random.choice(KUWAITI_JOKES))
         return
@@ -356,20 +368,14 @@ async def on_command_error(ctx, error):
         if raw.startswith("!"):
             question = raw[1:].strip()
             if question:
-                try:
-                    reply = await ask_ai(question, ctx.author.display_name)
-                    await ctx.send(reply[:1900])
-                    return
-                except Exception as e:
-                    await ctx.send(f"صار خطأ بالذكاء الاصطناعي: `{e}`")
-                    return
-    raise error
-
+                reply = await ask_ai(question, ctx.author.display_name)
+                await ctx.send(reply[:1900])
+                return
+    logger.exception("Unhandled command error: %s", error)
 
 # =========================
 # Music commands
 # =========================
-
 @bot.command(name="join", aliases=["ادخل"])
 async def join_command(ctx):
     vc = await ensure_sticky_voice()
@@ -405,7 +411,8 @@ async def play_command(ctx, *, search: str):
                 await play_next(ctx.channel)
 
     except Exception as e:
-        await ctx.send(f"صار خطأ: `{e}`")
+        logger.exception("Play command error: %s", e)
+        await ctx.send("صار خطأ وأنا أدور على الأغنية.")
 
 
 @bot.command(name="pause", aliases=["وقف"])
@@ -466,11 +473,9 @@ async def leave_command(ctx):
     else:
         await ctx.send("أنا أصلًا مو داخل روم.")
 
-
 # =========================
 # AI / Fun commands
 # =========================
-
 @bot.command(name="help", aliases=["مساعدة", "اوامر", "أوامر"])
 async def help_command(ctx):
     await ctx.send(
@@ -511,18 +516,13 @@ async def love_command(ctx):
 
 @bot.command(name="ai", aliases=["اسأل", "سولف", "تكلم"])
 async def ai_command(ctx, *, question: str):
-    try:
-        await ctx.send("لحظة، قاعد أفكر... 🤖")
-        reply = await ask_ai(question, ctx.author.display_name)
-        await ctx.send(reply[:1900])
-    except Exception as e:
-        await ctx.send(f"صار خطأ بالذكاء الاصطناعي: `{e}`")
-
+    await ctx.send("لحظة، قاعد أفكر... 🤖")
+    reply = await ask_ai(question, ctx.author.display_name)
+    await ctx.send(reply[:1900])
 
 # =========================
-# Error handler
+# Per-command error handler
 # =========================
-
 @join_command.error
 @play_command.error
 @pause_command.error
@@ -541,7 +541,7 @@ async def command_error(ctx, error):
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("ناقصك شي بالأمر.")
     else:
-        await ctx.send(f"صار خطأ: `{error}`")
-
+        logger.exception("Command error: %s", error)
+        await ctx.send("صار خطأ بسيط، جرّب مرة ثانية.")
 
 bot.run(TOKEN)
