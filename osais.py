@@ -494,7 +494,6 @@ async def on_message(message):
         return
 
     await bot.process_commands(message)
-
 # =========================
 # Commands
 # =========================
@@ -686,4 +685,5 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
 
