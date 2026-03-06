@@ -313,7 +313,7 @@ async def replay_command(ctx):
     await ctx.send("احبك اكثر ❤️")
 
 
-@bot.command(name="replay", aliases=["كل زق"])
+@bot.command(name="replayy", aliases=["كل زق"])
 @commands.has_permissions(administrator=True)
 async def replay_command(ctx):
     await ctx.send("كل زقين")
@@ -337,5 +337,6 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
 
 
