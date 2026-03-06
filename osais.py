@@ -493,8 +493,22 @@ async def help_command(ctx):
 # =========================
 @bot.event
 async def on_command_error(ctx, error):
+
     if isinstance(error, commands.CommandNotFound):
-        return
+
+        msg = ctx.message.content.strip()
+
+        # إذا الرسالة تبدأ !
+        if msg.startswith("!"):
+            question = msg[1:].strip()
+
+            if question:
+                await ctx.send("قاعد أفكر... لا تستعجل علي 🤖")
+
+                reply = await ask_ai(question, ctx.author.display_name)
+                await ctx.send(reply[:1900])
+                return
+
     logger.exception("Unhandled command error: %s", error)
 
 
@@ -517,3 +531,4 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
