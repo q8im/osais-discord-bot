@@ -68,6 +68,30 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
 CREATOR_REPLY = "L1 | discord @734f"
 
+# الأوامر الحقيقية حتى ما ينحسبون كسؤال AI
+REAL_COMMANDS = {
+    "join",
+    "اثبت",
+    "تحرر",
+    "play",
+    "شغل",
+    "pause",
+    "وقف",
+    "resume",
+    "كمل",
+    "skip",
+    "تخطي",
+    "سكيب",
+    "queue",
+    "قائمة",
+    "حلل",
+    "help",
+    "مساعدة",
+    "اوامر",
+    "أوامر",
+    "اسأل",
+}
+
 # =========================
 # Helpers
 # =========================
@@ -79,6 +103,26 @@ def asks_about_creator(text: str) -> bool:
         "مين سواك", "who made you", "who created you", "who programmed you"
     ]
     return any(x in t for x in triggers)
+
+
+def should_route_to_ai_from_bang(content: str) -> bool:
+    """
+    يخلي الرسائل اللي تبدأ بـ ! وتكون مو أمر معروف تنرسل للذكاء الاصطناعي.
+    أمثلة:
+    ! شلونك     -> AI
+    !منو انت     -> AI
+    !join        -> command
+    !play song   -> command
+    """
+    if not content.startswith("!"):
+        return False
+
+    after_bang = content[1:].strip()
+    if not after_bang:
+        return True  # بس كتب ! بدون شي
+
+    first_word = after_bang.split()[0].lower()
+    return first_word not in REAL_COMMANDS
 
 
 # =========================
@@ -101,12 +145,12 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
                         "لازم ترد دائمًا بالعربي وباللهجة الكويتية. "
                         "أسلوبك فكاهي بزيادة وتحب التمطيط والمزح الخفيف. "
                         "إذا أحد قال لك ضحكني، رد عليه برد مضحك وساخر مثل: ليش شايفني ارقوز اشتغل عندك؟ "
-                        "إذا أحد قال أبيك تساعدني أو ساعدني، رد عليه رد كويتي مضحك مثل: شتبي اخلص علينا؟ "
+                        " او مرات انقلع عني انقلع عني لا اتغشمر تفضل هههه إذا أحد قال أبيك تساعدني أو ساعدني، رد عليه رد كويتي مضحك مثل: شتبي اخلص علينا؟ "
                         "مسموح تكون وقح بشكل خفيف ومضحك، لكن بدون إساءة جارحة. "
                         "إذا أحد سألك منو صنعك أو منو برمجك أو من سواك، جاوبه فقط بهذا النص: L1 | discord @734f "
                         "إذا أحد سألك من أنت، قل: أنا ابو قتاده، بوت ديسكورد للأغاني والذكاء الاصطناعي. "
-                        "إذا كان السؤال عن شخص أو معلومة عامة جاوب بشكل طبيعي ومباشر. "
-                        "لا تتكلم كأنك إنسان؛ تكلم كبوت ديسكورد ذكي وفكاهي."
+                        "إذا كان السؤال عن شخص أو معلومة عامة جاوب بشكل و بشكل مضحك شوي قوللو كان السؤال عن شخص شيصيرلك ليش بتعرف بعدين جاوب ومرات لا تقولها. "
+                        "تكلم كأنك انسان اكثر وتفاعل وخلك فكاهي ."
                     ),
                 },
                 {
@@ -376,6 +420,7 @@ SPECIAL_USERS = {
     944979711581376542: "فصيل آمر شتبي؟ اخلص",
 }
 
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -387,6 +432,7 @@ async def on_message(message):
     content = message.content.strip()
     bot_mentioned = bot.user in message.mentions if bot.user else False
 
+    # إذا منشن ومعاه صورة
     if bot_mentioned and message.attachments:
         img = message.attachments[0]
         if img.content_type and img.content_type.startswith("image/"):
@@ -409,6 +455,7 @@ async def on_message(message):
             await message.channel.send(reply[:1900])
             return
 
+    # إذا منشن بدون صورة
     if bot_mentioned:
         clean_text = content
         if bot.user:
@@ -426,7 +473,22 @@ async def on_message(message):
         await message.channel.send(reply[:1900])
         return
 
+    # إذا المستخدم كتب ! وسؤاله مباشرة
+    if should_route_to_ai_from_bang(content):
+        question = content[1:].strip()
+
+        if not question:
+            await message.channel.send("اكتب سؤالك عقب ! لا تصير مستعجل 😏")
+            return
+
+        async with message.channel.typing():
+            reply = await ask_ai(question, message.author.display_name)
+
+        await message.channel.send(reply[:1900])
+        return
+
     await bot.process_commands(message)
+
 
 # =========================
 # Commands
@@ -545,7 +607,8 @@ async def queue_command(ctx):
         await ctx.send("القائمة فاضية.")
 
 
-@bot.command(name="!", aliases=["اسأل"])
+# خليته موجود احتياط، بس أنت تقدر تستخدم ! + السؤال مباشرة
+@bot.command(name="اسأل")
 async def ai_command(ctx, *, question: str):
     async with ctx.channel.typing():
         reply = await ask_ai(question, ctx.author.display_name)
@@ -582,7 +645,8 @@ async def help_command(ctx):
         "`!resume` أو `!كمل`\n"
         "`!skip` أو `!تخطي`\n"
         "`!queue` أو `!قائمة`\n"
-        "`!ai` أو `!اسأل` + سؤالك\n"
+        "`!` + سؤالك مباشرة للذكاء الاصطناعي\n"
+        "مثال: `! شلونك` أو `!منو انت`\n"
         "`!حلل` مع صورة"
     )
 
@@ -617,5 +681,3 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
-
-
