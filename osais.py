@@ -45,7 +45,6 @@ song_queue = []
 is_processing = False
 queue_lock = asyncio.Lock()
 
-# وضع التثبيت
 sticky_enabled = False
 sticky_channel_id: Optional[int] = None
 sticky_guild_id: Optional[int] = None
@@ -67,8 +66,10 @@ FFMPEG_OPTIONS = {
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
+CREATOR_REPLY = "L1 | discord @734f"
+
 # =========================
-# AI helper
+# Helpers
 # =========================
 def asks_about_creator(text: str) -> bool:
     t = text.strip().lower()
@@ -80,9 +81,21 @@ def asks_about_creator(text: str) -> bool:
     return any(x in t for x in triggers)
 
 
+async def send_thinking_then_reply(channel, thinking_text: str, final_text: str):
+    thinking_msg = await channel.send(thinking_text)
+    try:
+        await thinking_msg.delete()
+    except Exception:
+        pass
+    await channel.send(final_text[:1900])
+
+
+# =========================
+# AI text helper
+# =========================
 async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
     if asks_about_creator(user_text):
-        return "L1 | discord @734f"
+        return CREATOR_REPLY
 
     loop = asyncio.get_running_loop()
 
@@ -95,14 +108,14 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
                     "content": (
                         "أنت بوت ديسكورد اسمك ابو قتاده. "
                         "لازم ترد دائمًا بالعربي وباللهجة الكويتية. "
-                        "أسلوبك فكاهي بزيادة، وتحب التمطيط والمزح الخفيف. "
+                        "أسلوبك فكاهي بزيادة وتحب التمطيط والمزح . "
                         "إذا أحد قال لك ضحكني، رد عليه برد مضحك وساخر مثل: ليش شايفني ارقوز اشتغل عندك؟ "
-                        "إذا أحد قال أبيك تساعدني أو ساعدني، رد عليه برد كويتي مضحك مثل: شتبي اخلص علينا؟ "
-                        "مسموح تكون وقح بشكل خفيف ومضحك، لكن بدون شتائم قاسية أو إساءة جارحة أو تهديد. "
-                        "إذا أحد سألك من صنعك أو من برمجك أو من سواك، جاوبه فقط بهذا النص: L1 | discord @734f "
-                        "إذا أحد سألك من أنت، قل: أنا ابو قتاده، بوت ديسكورد للأغاني والذكاء الاصطناعي. "
-                        "جاوب عن الأشخاص أو المعلومات العامة بشكل طبيعي ومباشر إذا كان السؤال بسيط أو بديهي. "
-                        "لا تتكلم كأنك إنسان، تكلم كبوت ديسكورد ذكي وفكاهي."
+                        "إذا أحد قال أبيك تساعدني أو ساعدني، رد عليه رد كويتي مضحك مثل:حليوو, شتبي اخلص علينا؟ "
+                        "مسموح تكون وقح بشكل خفيف ومضحك، . "
+                        "إذا أحد سألك منو صنعك أو منو برمجك أو من سواك، جاوبه فقط بهذا النص: L1 | discord @734f "
+                        "إذا أحد سألك من أنت، قل: أنا ابو قتاده، للأغاني والذكاء الاصطناعي. "
+                        " او غير بالصيغ شوي عادي مو لازم كل مره تقول خالك او تصيرلك نوع هذي إذا كان السؤال عن شخص أو معلومة عامة جاوب بشكل طبيعي ومباشر ومع ضحك بالسؤال عن شخص مثلا مرات جاوب شنو خالك هذا او اذا كانت بنت قول شتصيرلك  . "
+                        "تكلم كانك انسان اسمه بو قتاده مو كانك بوت وخلك فكاهي ومفيد."
                     ),
                 },
                 {
@@ -117,8 +130,48 @@ async def ask_ai(user_text: str, user_name: str = "مستخدم") -> str:
         result = await loop.run_in_executor(None, _run)
         return (result or "ما عرفت أرد عليك الحين، رح وتعال بعد شوي.").strip()
     except Exception as e:
-        logger.exception("AI error: %s", e)
+        logger.exception("AI text error: %s", e)
         return "الذكاء الاصطناعي مطلع روحه الحين، جرّب بعد شوي."
+
+
+# =========================
+# AI vision helper
+# =========================
+async def ask_ai_about_image(image_url: str, user_text: str, user_name: str = "مستخدم") -> str:
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        response = ai_client.responses.create(
+            model=OPENAI_MODEL,
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "أنت بوت ديسكورد اسمك ابو قتاده. "
+                        "رد دائمًا بالعربي وباللهجة الكويتية. "
+                        "اشرح الصورة بشكل واضح ومباشر وبأسلوب كويتي خفيف وفكاهي. "
+                        "إذا طلب المستخدم رأيك بالصورة، عطه رأيك بشكل لطيف أو ساخر عادي مسموح. "
+                        "إذا الصورة فيها أشخاص أو أشياء، صف الموجود بشكل مضحك او عادي بدون مبالغة. "
+                        "إذا كان السؤال عن شي محدد بالصورة، جاوب عليه مباشرة."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": f"اسم المستخدم: {user_name}\nالسؤال: {user_text}"},
+                        {"type": "input_image", "image_url": image_url},
+                    ],
+                },
+            ],
+        )
+        return response.output_text
+
+    try:
+        result = await loop.run_in_executor(None, _run)
+        return (result or "ما قدرت أفهم الصورة الحين.").strip()
+    except Exception as e:
+        logger.exception("AI vision error: %s", e)
+        return "ما قدرت أفهم الصورة الحين، جرّب بعد شوي."
 
 
 # =========================
@@ -154,6 +207,8 @@ async def get_song_info(search: str):
 
 
 async def ensure_voice_for_ctx(ctx) -> Optional[discord.VoiceClient]:
+    global sticky_enabled, sticky_channel_id
+
     if ctx.author.voice is None or ctx.author.voice.channel is None:
         await ctx.send("دش روم صوتي أول بعدين تعال تفلسف علي.")
         return None
@@ -162,7 +217,6 @@ async def ensure_voice_for_ctx(ctx) -> Optional[discord.VoiceClient]:
     vc = ctx.guild.voice_client
 
     try:
-        # إذا مثبت وما تحرر، لا يتحرك عن رومه
         if sticky_enabled and sticky_channel_id is not None:
             sticky_channel = ctx.guild.get_channel(sticky_channel_id)
             if sticky_channel is not None:
@@ -175,7 +229,6 @@ async def ensure_voice_for_ctx(ctx) -> Optional[discord.VoiceClient]:
                     await vc.move_to(sticky_channel)
                 return vc
 
-        # الوضع العادي
         if vc is None or not vc.is_connected():
             vc = await target_channel.connect(self_deaf=True)
             await asyncio.sleep(1)
@@ -208,7 +261,6 @@ async def ensure_sticky_voice():
 
         channel = guild.get_channel(sticky_channel_id)
         if channel is None or not isinstance(channel, discord.VoiceChannel):
-            # إذا الروم انمسح، تحرر تلقائي
             sticky_enabled = False
             sticky_channel_id = None
             sticky_guild_id = None
@@ -307,14 +359,12 @@ async def on_voice_state_update(member, before, after):
     if not bot.user or member.id != bot.user.id:
         return
 
-    # إذا مثبت وانطرد أو انفصل، يرجع
     if sticky_enabled:
         if before.channel is not None and after.channel is None:
             await asyncio.sleep(2)
             await ensure_sticky_voice()
             return
 
-        # إذا حاول أحد يسحبه لروم ثاني وهو مثبت، يرجع لرومه المثبت
         if after.channel is not None and sticky_channel_id is not None:
             if after.channel.id != sticky_channel_id:
                 await asyncio.sleep(1)
@@ -328,6 +378,22 @@ async def on_message(message):
 
     content = message.content.strip()
     bot_mentioned = bot.user in message.mentions if bot.user else False
+
+    if bot_mentioned and message.attachments:
+        img = message.attachments[0]
+        if img.content_type and img.content_type.startswith("image/"):
+            clean_text = content
+            if bot.user:
+                clean_text = clean_text.replace(f"<@{bot.user.id}>", "")
+                clean_text = clean_text.replace(f"<@!{bot.user.id}>", "")
+                clean_text = clean_text.strip()
+
+            if not clean_text:
+                clean_text = "اشرح الصورة وعط رأيك فيها"
+
+            reply = await ask_ai_about_image(img.url, clean_text, message.author.display_name)
+            await message.channel.send(reply[:1900])
+            return
 
     if bot_mentioned:
         clean_text = content
@@ -393,7 +459,7 @@ async def unsticky_command(ctx):
     sticky_channel_id = None
     sticky_guild_id = None
 
-    await ctx.send("تم التحرر. الحين إذا انطردت ما برجع، وإذا تبي تسحبني اسحبني.")
+    await ctx.send("تم التحرر. الحين إذا انطردت ما برجع.")
 
 
 @bot.command(name="play", aliases=["شغل"])
@@ -466,9 +532,23 @@ async def queue_command(ctx):
 
 @bot.command(name="ai", aliases=["اسأل"])
 async def ai_command(ctx, *, question: str):
-    await ctx.send("قاعد أفكر... لا تستعجل علي 🤖")
     reply = await ask_ai(question, ctx.author.display_name)
-    await ctx.send(reply[:1900])
+    await send_thinking_then_reply(ctx.channel, "💬 يكتب ...", reply)
+
+
+@bot.command(name="حلل")
+async def vision_command(ctx, *, question: str = "اشرح الصورة وعط رأيك فيها"):
+    if not ctx.message.attachments:
+        await ctx.send("ارسل صورة مع الأمر بعدين تعال.")
+        return
+
+    img = ctx.message.attachments[0]
+    if not img.content_type or not img.content_type.startswith("image/"):
+        await ctx.send("هذي مو صورة.")
+        return
+
+    reply = await ask_ai_about_image(img.url, question, ctx.author.display_name)
+    await send_thinking_then_reply(ctx.channel, "قاعد أفكر بالصورة... انطر ", reply)
 
 
 @bot.command(name="help", aliases=["مساعدة", "اوامر", "أوامر"])
@@ -484,7 +564,7 @@ async def help_command(ctx):
         "`!skip` أو `!تخطي`\n"
         "`!queue` أو `!قائمة`\n"
         "`!ai` أو `!اسأل` + سؤالك\n"
-        "أو منشنني واسألني مباشرة"
+        "`!حلل` مع صورة"
     )
 
 
@@ -493,22 +573,8 @@ async def help_command(ctx):
 # =========================
 @bot.event
 async def on_command_error(ctx, error):
-
     if isinstance(error, commands.CommandNotFound):
-
-        msg = ctx.message.content.strip()
-
-        # إذا الرسالة تبدأ !
-        if msg.startswith("!"):
-            question = msg[1:].strip()
-
-            if question:
-                await ctx.send("قاعد أفكر... لا تستعجل علي 🤖")
-
-                reply = await ask_ai(question, ctx.author.display_name)
-                await ctx.send(reply[:1900])
-                return
-
+        return
     logger.exception("Unhandled command error: %s", error)
 
 
@@ -521,6 +587,7 @@ async def on_command_error(ctx, error):
 @skip_command.error
 @queue_command.error
 @ai_command.error
+@vision_command.error
 @help_command.error
 async def command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -531,4 +598,3 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
-
