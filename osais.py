@@ -23,6 +23,8 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 song_queue = []
+is_processing = False
+queue_lock = asyncio.Lock()
 sticky_lock = asyncio.Lock()
 
 YTDL_OPTIONS = {
@@ -210,6 +212,8 @@ async def join_command(ctx):
 
 @bot.command(name="play", aliases=["شغل"])
 async def play_command(ctx, *, search: str):
+    global is_processing
+
     vc = await ensure_voice()
     if vc is None:
         await ctx.send("ما قدرت أدخل الروم الثابت.")
@@ -221,8 +225,10 @@ async def play_command(ctx, *, search: str):
         song_queue.append(song)
         await ctx.send(f"➕ ضفتها للقائمة: **{song['title']}**")
 
-        if not vc.is_playing() and not vc.is_paused():
-            await play_next(ctx.channel)
+        async with queue_lock:
+            if not is_processing and not vc.is_playing() and not vc.is_paused():
+                is_processing = True
+                await play_next(ctx.channel)
 
     except Exception as e:
         await ctx.send(f"صار خطأ: `{e}`")
@@ -321,3 +327,4 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
