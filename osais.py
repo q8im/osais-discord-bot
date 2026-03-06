@@ -362,10 +362,30 @@ async def on_voice_state_update(member, before, after):
                 await ensure_sticky_voice()
 
 
+SPECIAL_USERS = {
+    841779552979910746: " انت الهوى وانت النفس وانت بحياتي كلشي انت العمر وانت النبض بالروح حبك يمشي 🤴 امر تدلل حمودي ؟"
+    1119049885254176798: " نواف آمر شتبي؟ اخلص"
+    1463671451566608458: " نواف آمر شتبي؟ اخلص"
+    767626889380233246: " حسوني يلوموني فيك 🤤 تفضل قول امر شاورما ؟"
+    1137052965191041094: " فصيل افتح افتح نت تفضل قول امر ؟"
+    970582370166116433: " علي تفضل قول امر شاورما ولا سيخ كباب ههههاها دمي؟"
+    763667733933719573: "  حمود يا هلا قول قول امر ؟"
+    1401558038187344053: " ما ختمت رزدنت عبدالله يا هلا قول قول امر ؟"
+    1330594901599191060: " فجوره فديتج اخخ اموت فيج قولي جعلني فداس "
+    978909635270561822: " توب المهندسه قولي امري ؟ "
+    944979711581376542: " فصيل آمر شتبي؟ اخلص"
+
+
+
+}
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+
+    if message.author.id in SPECIAL_USERS:
+        await message.channel.send(SPECIAL_USERS[message.author.id])
 
     content = message.content.strip()
     bot_mentioned = bot.user in message.mentions if bot.user else False
@@ -383,7 +403,11 @@ async def on_message(message):
                 clean_text = "اشرح الصورة وعط رأيك فيها"
 
             async with message.channel.typing():
-                reply = await ask_ai_about_image(img.url, clean_text, message.author.display_name)
+                reply = await ask_ai_about_image(
+                    img.url,
+                    clean_text,
+                    message.author.display_name
+                )
 
             await message.channel.send(reply[:1900])
             return
@@ -406,7 +430,6 @@ async def on_message(message):
         return
 
     await bot.process_commands(message)
-
 
 # =========================
 # Commands
@@ -525,7 +548,7 @@ async def queue_command(ctx):
         await ctx.send("القائمة فاضية.")
 
 
-@bot.command(name="ai", aliases=["اسأل"])
+@bot.command(name="!", aliases=["اسأل"])
 async def ai_command(ctx, *, question: str):
     async with ctx.channel.typing():
         reply = await ask_ai(question, ctx.author.display_name)
@@ -597,3 +620,4 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
