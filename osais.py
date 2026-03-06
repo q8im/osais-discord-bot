@@ -307,16 +307,35 @@ async def help_command(ctx):
         "`!help` أو `!مساعدة`"
     )
 
-@bot.command(name="replay", aliases=["احبك"])
+@bot.command(name="احبك", aliases=["love"])
 @commands.has_permissions(administrator=True)
-async def replay_command(ctx):
+async def love_command(ctx):
     await ctx.send("احبك اكثر ❤️")
 
-
-@bot.command(name="replayy", aliases=["كل زق"])
+@bot.command(name="كل زق", aliases=["cz"])
 @commands.has_permissions(administrator=True)
-async def replay_command(ctx):
+async def insult_command(ctx):
     await ctx.send("كل زقين")
+
+@join_command.error
+@play_command.error
+@pause_command.error
+@resume_command.error
+@skip_command.error
+@queue_command.error
+@leave_command.error
+@help_command.error
+@love_command.error
+@insult_command.error
+async def command_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("هالأمر بس للأدمن.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("ناقصك شي بالأمر.")
+    else:
+        await ctx.send(f"صار خطأ: `{error}`")
+
+bot.run(TOKEN)
     
 @join_command.error
 @play_command.error
@@ -337,6 +356,7 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
 
 
 
