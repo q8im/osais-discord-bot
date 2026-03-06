@@ -426,11 +426,17 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if message.author.id in SPECIAL_USERS:
-        await message.channel.send(SPECIAL_USERS[message.author.id])
-
     content = message.content.strip()
     bot_mentioned = bot.user in message.mentions if bot.user else False
+
+    # رد خاص للمستخدمين المحددين فقط إذا كتبوا ! + كلام
+    if message.author.id in SPECIAL_USERS and content.startswith("!"):
+        after_bang = content[1:].strip()
+
+        # إذا كتب ! وبعدين كلام عادي مو أمر من أوامر البوت
+        if after_bang and after_bang.split()[0].lower() not in REAL_COMMANDS:
+            await message.channel.send(SPECIAL_USERS[message.author.id])
+            return
 
     # إذا منشن ومعاه صورة
     if bot_mentioned and message.attachments:
@@ -488,7 +494,6 @@ async def on_message(message):
         return
 
     await bot.process_commands(message)
-
 
 # =========================
 # Commands
@@ -681,3 +686,4 @@ async def command_error(ctx, error):
 
 
 bot.run(TOKEN)
+
