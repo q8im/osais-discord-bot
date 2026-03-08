@@ -125,6 +125,22 @@ def should_route_to_ai_from_bang(content: str) -> bool:
     return first_word not in REAL_COMMANDS
 
 
+def get_fixed_keyword_reply(text: str) -> Optional[str]:
+    """
+    ردود ثابتة خارج الذكاء الاصطناعي.
+    إذا كتب المستخدم كلمة محددة، البوت يرد برد ثابت من هنا مباشرة.
+    """
+    t = text.strip().lower()
+
+KEYWORD_REPLIES = {
+    "كس امك": "تسبني ليه يا قحبه يا قحه يا شرموط عيري فيك مناك عرصه",
+    "انيكك": "ترا بنيك طيز طيز يا خنيث فاهم يلا انقلع عني يا بو خرق علشان ما احط سبعي بطيزك واطير واقعد ويمسكوني ويحطون سفره ويحطون تيليفونات",
+    "☺ قحبه": " انت قحبه",
+}
+
+    return KEYWORD_REPLIES.get(t)
+
+
 # =========================
 # AI text helper
 # =========================
@@ -429,6 +445,12 @@ async def on_message(message):
 
     content = message.content.strip()
     bot_mentioned = bot.user in message.mentions if bot.user else False
+
+    # رد ثابت للكلمات المحددة خارج الذكاء الاصطناعي
+    fixed_reply = get_fixed_keyword_reply(content)
+    if fixed_reply:
+        await message.channel.send(fixed_reply)
+        return
 
     # إذا منشن ومعاه صورة
     if bot_mentioned and message.attachments:
