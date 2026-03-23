@@ -66,7 +66,7 @@ FFMPEG_OPTIONS = {
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
-CREATOR_REPLY = "L1 | discord @734f"
+CREATOR_REPLY = "L1 | discord"
 
 # الأوامر الحقيقية حتى ما ينحسبون كسؤال AI
 REAL_COMMANDS = {
